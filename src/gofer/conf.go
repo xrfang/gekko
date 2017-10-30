@@ -15,9 +15,9 @@ var dev device
 func loadConf() {
 	self := path.Base(os.Args[0])
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "%s telepathy apparatus\n", self)
-		fmt.Fprintf(os.Stderr, "usage: %s <options>...\n\n", self)
-		fmt.Println("options:")
+		fmt.Fprintf(os.Stderr, "%s TELEPATHY APPARATUS\n\n", strings.ToUpper(self))
+		fmt.Fprintf(os.Stderr, "USAGE: %s <options>...\n\n", self)
+		fmt.Println("OPTIONS")
 		flag.PrintDefaults()
 	}
 	cfg := flag.String("conf", "", "configuration file")
@@ -26,6 +26,10 @@ func loadConf() {
 	if *ver {
 		fmt.Println(verinfo())
 		os.Exit(0)
+	}
+	if *cfg == "" {
+		fmt.Println("missing configuration file (-conf)")
+		os.Exit(1)
 	}
 	dev.MTU = 1400
 	dev.UDPMultiSend = 2
