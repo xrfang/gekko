@@ -6,7 +6,6 @@ import (
 	"math/rand"
 	"net"
 	"os"
-	"strings"
 	"time"
 )
 
@@ -18,9 +17,11 @@ type device struct {
 	Tunnel       string //tunnel IP addresses for the device
 	IfName       string //interface name
 	MTU          int
+	UDPMultiSend float64
+	localIP      string
+	remoteIP     string
 	ifce         *os.File
 	conn         interface{}
-	UDPMultiSend float64
 	udpRemote    *net.UDPAddr
 	lastPingSent time.Time
 	lastPingRcvd time.Time
@@ -82,33 +83,12 @@ func (d device) errorLevel(err error) int {
 }
 
 func (d device) Initialize() {
-	var localIP, remoteIP, role string
-	svr, cli := d.parseTunnelIP()
-	if d.Remote == "" { //no Remote means device is acting as server
-		role = "s"
-		localIP = svr
-		remoteIP = cli
-	} else {
-		role = "c"
-		localIP = cli
-		remoteIP = svr
-	}
-	d.Proto = strings.ToLower(d.Proto)
-	d.Type = strings.ToLower(d.Type)
-	if d.IfName == "" {
-		d.IfName = fmt.Sprintf("%s%s%d", d.Proto[:1], role, d.Port)
-	}
-	if d.MTU == 0 {
-		d.MTU = 1400
-	}
 	var err error
 	switch d.Type {
 	case "tun":
 		d.ifce, err = OpenTUN(d.IfName)
 	case "tap":
 		d.ifce, err = OpenTAP(d.IfName)
-	default:
-		err = fmt.Errorf("invalid interface type %s", d.Type)
 	}
 	assert(err)
 	defer func() {
@@ -117,16 +97,10 @@ func (d device) Initialize() {
 			panic(e)
 		}
 	}()
-	do("ip addr add %s peer %s dev %s", localIP, remoteIP, d.IfName)
+	do("ip addr add %s peer %s dev %s", d.localIP, d.remoteIP, d.IfName)
 	do("ip link set dev %s up mtu %d", d.IfName, d.MTU)
 	switch d.Proto {
 	case "udp":
-		if d.UDPMultiSend < 1 {
-			d.UDPMultiSend = 1
-		}
-		if d.UDPMultiSend > 5 {
-			d.UDPMultiSend = 5
-		}
 		if d.Remote == "" {
 			d.UDPServer()
 		} else {
@@ -138,8 +112,6 @@ func (d device) Initialize() {
 		} else {
 			d.TCPClient()
 		}
-	default:
-		panic(fmt.Errorf("invalid protocol %s", d.Proto))
 	}
 }
 

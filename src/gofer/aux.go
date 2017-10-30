@@ -6,12 +6,6 @@ import (
 	"strings"
 )
 
-func assert(err error) {
-	if err != nil {
-		panic(err)
-	}
-}
-
 func do(cmdline string, params ...interface{}) {
 	cmd := fmt.Sprintf(cmdline, params...)
 	args := strings.Split(cmd, " ")

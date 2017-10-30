@@ -1,0 +1,24 @@
+## device name, either TUN or TAP
+TYPE=
+
+## transmission protocol, either TCP or UDP
+PROTO=
+
+## transmission port
+PORT=
+
+## remote address if omit, run in server mode
+REMOTE=
+
+## ip address of the tunnel end points
+TUNNEL=
+
+## device name (will be auto-generated, necessary only if the 
+## auto-generated name conflicts with existing device)
+#IFNAME=
+
+## maximum transmission unit
+#MTU=1400
+
+## multi-send factor, for UDP transmission only
+#UDPMULTISEND=2
