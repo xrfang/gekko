@@ -12,7 +12,6 @@ func main() {
 	s.Initialize()
 	fmt.Printf("svr=%+v\n", s)
 	c := device{
-		IfName: "g7086cli",
 		Type:   "TUN",
 		Proto:  "UDP",
 		Remote: "127.0.0.1",

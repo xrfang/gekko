@@ -82,19 +82,21 @@ func (d device) errorLevel(err error) int {
 }
 
 func (d device) Initialize() {
-	var localIP, remoteIP string
+	var localIP, remoteIP, role string
 	svr, cli := d.parseTunnelIP()
 	if d.Remote == "" { //no Remote means device is acting as server
+		role = "s"
 		localIP = svr
 		remoteIP = cli
 	} else {
+		role = "c"
 		localIP = cli
 		remoteIP = svr
 	}
 	d.Proto = strings.ToLower(d.Proto)
 	d.Type = strings.ToLower(d.Type)
 	if d.IfName == "" {
-		d.IfName = fmt.Sprintf("g%d%s", d.Port, d.Proto[:1])
+		d.IfName = fmt.Sprintf("%s%s%d", d.Proto[:1], role, d.Port)
 	}
 	if d.MTU == 0 {
 		d.MTU = 1400
@@ -252,7 +254,7 @@ func (d device) UDPServer() {
 func (d device) UDPClient() {
 	conn, err := net.Dial("udp4", fmt.Sprintf("%s:%d", d.Remote, d.Port))
 	assert(err)
-	d.conn = &conn
+	d.conn = conn
 	go func() {
 		defer func() {
 			d.Close()
