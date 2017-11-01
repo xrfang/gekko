@@ -7,7 +7,7 @@ import (
 func main() {
 	loadConf()
 	dev.Initialize()
-	fmt.Printf("DEVICE:\n%+v\n\n", dev)
+	fmt.Printf("DEVICE: %s\n\n", dev.IfName)
 	var wait chan int
 	<-wait
 }

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"math/rand"
@@ -16,15 +18,19 @@ type device struct {
 	Remote       string //Remote IP address, for client side only
 	Tunnel       string //tunnel IP addresses for the device
 	IfName       string //interface name
+	Key          string
 	MTU          int
 	UDPMultiSend float64
 	localIP      string
 	remoteIP     string
+	cipher       *Cipher
+	dr           DupReg
 	ifce         *os.File
 	conn         interface{}
 	udpRemote    *net.UDPAddr
 	lastPingSent time.Time
 	lastPingRcvd time.Time
+	dup          int
 	rxc          int
 	rxb          int
 	txc          int
@@ -86,8 +92,45 @@ func (d device) errorLevel(err error, mark string) int {
 	return 1
 }
 
-func (d device) Initialize() {
-	var err error
+func (d device) IsPing(data []byte) bool {
+	if len(data) < 5 {
+		return false
+	}
+	return string(data[:5]) == "GOFER"
+}
+
+func (d device) EncodeTCP(data, sig []byte) (buf, iv []byte) {
+	data, iv = d.cipher.Encrypt(data, sig)
+	cnt := uint16(len(data))
+	buf = make([]byte, cnt+2)
+	binary.BigEndian.PutUint16(buf, cnt)
+	copy(buf[2:], data)
+	return
+}
+
+func (d device) EncodeUDP(data, sig []byte) (buf, iv []byte) {
+	buf, iv = d.cipher.Encrypt(data, sig)
+	return
+}
+
+func (d device) Decode(buf []byte) (data, iv []byte) {
+	data, iv = d.cipher.Decrypt(buf)
+	return
+}
+
+func (d device) Initialize() (err error) {
+	defer func() {
+		if e := recover(); e != nil {
+			if d.ifce != nil {
+				d.ifce.Close()
+			}
+			err = e.(error)
+		}
+	}()
+	key, err := hex.DecodeString(d.Key)
+	assert(err)
+	d.cipher, err = NewCipher(key)
+	assert(err)
 	switch d.Type {
 	case "tun":
 		d.ifce, err = OpenTUN(d.IfName)
@@ -95,14 +138,7 @@ func (d device) Initialize() {
 		d.ifce, err = OpenTAP(d.IfName)
 	}
 	assert(err)
-	defer func() {
-		if e := recover(); e != nil {
-			fmt.Printf("error init: %v\n", e)
-			d.ifce.Close()
-			panic(e)
-		}
-	}()
-	fmt.Printf("init: ifce=%+v\n", d.ifce)
+	d.dr.Init(5) //duplicate detection threshold 5 seconds
 	do("ip addr add %s peer %s dev %s", d.localIP, d.remoteIP, d.IfName)
 	do("ip link set dev %s up mtu %d", d.IfName, d.MTU)
 	switch d.Proto {
@@ -119,6 +155,7 @@ func (d device) Initialize() {
 			d.TCPClient()
 		}
 	}
+	return
 }
 
 func (d *device) udpRecv() (data []byte, remoteAddr *net.UDPAddr, err error) {
@@ -128,27 +165,22 @@ func (d *device) udpRecv() (data []byte, remoteAddr *net.UDPAddr, err error) {
 	if err != nil {
 		return
 	}
-	data = buf[:cnt]
-	/*
-		data, iv := n.Decode(buf[:cnt])
-		if data == nil {
-			err = fmt.Errorf("invalid gekko packet")
-			return
-		}
-	*/
+	data, iv := d.Decode(buf[:cnt])
+	if data == nil {
+		err = fmt.Errorf("invalid packet")
+		return
+	}
 	d.rxc++
 	d.rxb += len(data)
 	d.lastPingRcvd = time.Now()
-	/*
-		if n.IsPing(data) {
-			data = nil
-			return
-		}
-		if n.dr.IsDuplicate(signof(iv)) {
-			data = nil
-			n.dup++
-		}
-	*/
+	if d.IsPing(data) {
+		data = nil
+		return
+	}
+	if d.dr.IsDuplicate(signof(iv)) {
+		data = nil
+		d.dup++
+	}
 	return
 }
 
@@ -161,9 +193,7 @@ func (d *device) udpSend(data []byte) (err error) {
 				break
 			}
 		}
-		_ = sig
-		buf = data
-		//buf, sig = n.EncodeUDP(data, sig)
+		buf, sig = d.EncodeUDP(data, sig)
 		if d.udpRemote == nil {
 			_, err = d.conn.(net.Conn).Write(buf)
 		} else {
@@ -203,7 +233,6 @@ func (d device) UDPServer() {
 			d.udpRemote = remote
 			_, err = d.ifce.Write(data)
 			if d.errorLevel(err, "UDPServer::ifce.Write") == 2 {
-				fmt.Println("ifce.Write:", err)
 				break
 			}
 		}

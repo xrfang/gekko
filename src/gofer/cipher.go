@@ -3,7 +3,6 @@ package main
 import (
 	"crypto/rand"
 	"encoding/binary"
-	"fmt"
 	"time"
 
 	"golang.org/x/crypto/blowfish"
@@ -20,7 +19,6 @@ func tselapsed(sig []byte) float64 {
 	sig[7] = 0
 	ts := binary.LittleEndian.Uint64(sig)
 	t := time.Unix(int64(ts), 0)
-	fmt.Println(t)
 	return time.Since(t).Seconds()
 }
 
